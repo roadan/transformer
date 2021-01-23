@@ -47,12 +47,12 @@ az functionapp create \
 az functionapp config appsettings set \
   -n $name \
   -g $resourcegroup \
-  --settings "$connectionString"
+  --settings "AzureWebJobsStorage=$connectionString"
 
 az functionapp config appsettings set \
   -n $name \
   -g $resourcegroup \
-  --settings "$connectionString"
+  --settings "badookinstore=$connectionString"
 
 # az storage share create --account-name $storagename --account-key $key --name sqlitefiles
 
