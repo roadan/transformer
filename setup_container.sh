@@ -7,7 +7,6 @@ do
         s) storagename=${OPTARG};;    #blacktransformer2
         l) location=${OPTARG};;       #australiaeast
         r) resourcegroup=${OPTARG};;  #blacktransformer2
-        k) key=${OPTARG};;
     esac
 done
 
@@ -15,7 +14,6 @@ echo "name: $name";
 echo "storagename: $storagename";
 echo "location: $location";
 echo "resourcegroup: $resourcegroup";
-echo "key: $key";
 
 # az storage account create \
 #   --name $storagename \
@@ -24,23 +22,37 @@ echo "key: $key";
 
 #   --sku Standard_LRS
 
+connectionString=$(az storage account show-connection-string --resource-group $resourcegroup --name $storagename --query connectionString --output tsv)
+
+az functionapp plan create \
+  --resource-group $resourcegroup \
+  --name $name \
+  --location $location \
+  --number-of-workers 1 \
+  --sku EP1 \
+  --is-linux
 
 az functionapp create \
   --name $name \
   --storage-account $storagename \
-  --consumption-plan-location $location \
+  --plan $name \
   --resource-group $resourcegroup \
   --os-type Linux \
   --runtime python \
   --runtime-version 3.7 \
-  --functions-version 2 \
+  --functions-version 3 \
+  --disable-app-insights \
   --deployment-container-image-name bdktransformers.azurecr.io/badook/blacktransformer:latest
 
-az webapp config appsettings set \
+az functionapp config appsettings set \
   -n $name \
   -g $resourcegroup \
-  --settings \
-    "badookinstore=DefaultEndpointsProtocol=https;EndpointSuffix=core.windows.net;AccountName=${storagename};AccountKey=${key};"
+  --settings "$connectionString"
+
+az functionapp config appsettings set \
+  -n $name \
+  -g $resourcegroup \
+  --settings "$connectionString"
 
 # az storage share create --account-name $storagename --account-key $key --name sqlitefiles
 
