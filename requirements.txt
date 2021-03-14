@@ -1,4 +1,7 @@
+dask[dataframe]
 azure-functions
+azure-storage-blob
 spatialite 
-pysqlite3-binary
 pysqlite3
+pandas
+pyarrow

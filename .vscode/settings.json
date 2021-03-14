@@ -5,7 +5,5 @@
     "azureFunctions.projectLanguage": "Python",
     "azureFunctions.projectRuntime": "~3",
     "debug.internalConsoleOptions": "neverOpen",
-    "python.pythonPath": "/System/Library/Frameworks/Python.framework/Versions/2.7/Resources/Python.app/Contents/MacOS/Python",
-    "badookinstore": "DefaultEndpointsProtocol=https;AccountName=blacktransformer2;AccountKey=XijJFcWz5m3o14HRr/D35zyuJYV6ozxpJZNOcJEq/b7lrDe8AcNfFzCzlM0Cdmhgi6v0ha1uaMHuF6Jioz7Vcw==;EndpointSuffix=core.windows.net"
-
+    "python.pythonPath": "/Users/yaniv/badook/black-transformer/venv/bin/python3.9"
 }

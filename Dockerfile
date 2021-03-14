@@ -7,5 +7,6 @@ RUN apt-get update && apt-get install -y libspatialite-dev
 RUN ln -s /lib/x86_64-linux-gnu/mod_spatialite.so /usr/lib/x86_64-linux-gnu/mod_spatialite
 
 COPY requirements.txt /
+RUN pip install --upgrade pip
 RUN pip install -r /requirements.txt
 COPY . /home/site/wwwroot
