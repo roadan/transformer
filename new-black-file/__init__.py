@@ -1,6 +1,6 @@
 import sys
 import logging
-import spatialite
+import sqlite3
 import azure.functions as func
 import pandas as pd
 import os 
@@ -8,40 +8,43 @@ import base64
 import uuid
 import glob
 import io
+import json 
+import gc
+import shutil
+import sqlalchemy as sa
 
 from azure.storage.blob import BlobServiceClient, BlobBlock
 from io import BytesIO
 import dask.dataframe as da
+from urllib.parse import urlparse
 
+def main(event: func.EventGridEvent) -> None:
 
-logging.info("started black transformer app")
-logging.info("-----------------------------")
-
-def main(myblob: func.InputStream) -> None:
-    logging.info(f"Python blob trigger function processed blob \n"
-                 f"Name: {myblob.name}\n"
-                 f"Blob Size: {myblob.length} bytes")
-
-    name = os.path.relpath(myblob.name, os.environ['incontainer'])
+    data = event.get_json()
+    name = os.path.basename(data['url'])
 
     """ Writinh the blob db to /tmp """
-    download_chunks(name, os.environ['incontainer'], os.environ['badookinstore'], myblob.length)
+    download_chunks(name, os.environ['incontainer'], os.environ['badookinstore'])
 
     """ Exporting to parquet and uploading """
     db_path = f'/tmp/{name}'
-    output_path = f'{name}.parquet'
-    res = export_parquet(db_path, output_path)
-    upload(name, res, db_path)
+    output_path = f'{name}-parquet'
+    
+    export_parquet(db_path, output_path)
 
     """ cleaning up """
     if os.path.exists(db_path):
         os.remove(db_path)
 
-def download_chunks(file_name, container, conn, blob_size):
+#@profile
+def download_chunks(file_name, container, conn):
     blob_service = BlobServiceClient.from_connection_string(conn)
     blob_client = blob_service.get_blob_client(container=container, blob=file_name)
-
+    
+    blob_poperties = blob_client.get_blob_properties()
+    blob_size = blob_poperties.size
     bytesRemaining = blob_size
+    
     bytesToFetch = 0  
     start = 0 
     chunk_size = 1024*1024
@@ -54,43 +57,82 @@ def download_chunks(file_name, container, conn, blob_size):
                 bytesToFetch = chunk_size
 
             downloader = blob_client.download_blob(start,bytesToFetch)
-            file.write(downloader.readall())
+            b = downloader.readall()
+            file.write(b)
             start += bytesToFetch
             bytesRemaining -= bytesToFetch
-            print(f'{bytesRemaining} left')
-
+            #print(f'{bytesRemaining} left')
+            del downloader
+            del b
+    gc.collect()
 
 def export_parquet(db_path, output_path):
-    with spatialite.connect(db_path) as db:
-        df = pd.read_sql_query("SELECT uuid, timestamp, hasLine, ST_X(fromPosition) as positionX, ST_Y(fromPosition) as positionY, fromAltitude, toAltitude, detectionUuid, bestClassification, trackUuid, previousTrackPointUuid, isKeyPoint, localTrackUuid, sourceNodeUuid from rawTrackPoints", db)
-        ddf = da.from_pandas(df, chunksize=30000)
-        ddf.to_parquet(f'{output_path}/')
-        return f'{output_path}/'
+    batch_size = 400000
+    i = 1
+    query = f'SELECT * from trackPoints order by timestamp limit {batch_size}'
+    with sqlite3.connect(db_path) as db:
+        lasttime = 0
+        while True:
+            if lasttime != 0:
+                query = f'SELECT * from trackPoints WHERE timestamp > \'{lasttime}\' order by timestamp limit {batch_size}'
+            
+            df = pd.read_sql_query(query, db)
+            if len(df) == 0:
+                break
+            ddf = da.from_pandas(df, chunksize=20000)
+# ddf = da.read_sql_table('trackPoints', f'sqlite:///{db_path}', index_col='fromPositionX',#, engine_kwargs={'connect_args': {'detect_types': sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES}, 'native_datetime': True})
+#         columns=['uuid', 'localTrackUuid', 'trackUuid', sa.sql.column('timestamp').cast(sa.types.String).label('timestamp'), 'sourceNodeUuid', 'fromPositionX', 'fromPositionY', 'toPositionX', 'toPositionY' ])  
+#dff = dff.repartition(10000)
+            account = os.environ['AZURE_BLOB_ACCOUNT_NAME'] 
+            account_key = os.environ['AZURE_BLOB_ACCOUNT_KEY']
+            container = os.environ['badookoutstore']
 
-def upload(name, root_path, db_path):
+            storage_options={'account_name': account, 'account_key': account_key}
+
+            ddf.to_parquet(f'abfs://{container}/{output_path}/{i}', storage_options=storage_options)
+            lasttime = df["timestamp"].max()
+        # upload(f'{output_path}/')
+        # shutil.rmtree(f'{output_path}/')
+            i+=1
+            if len(df) < batch_size:
+                break
+
+def upload(root_path):
     blob_service = BlobServiceClient.from_connection_string(os.environ['badookinstore'])
     container_name = os.environ['badookoutstore']
     files = [f for f in glob.glob(root_path + "**/*.parquet", recursive=True)]
 
     for f in files:
         with open(f, 'rb') as data:
-            print(f'file: {f}')
-            blob_client = blob_service.get_blob_client(container=container_name, blob=f)
+            blob_client = blob_service.get_blob_client(container=container_name, blob=os.path.relpath(f, '/tmp'))
             blob_client.upload_blob(data)
-    
+
+
+
 # if __name__ == "__main__":
 #     argv = sys.argv
 #     file_name = argv[1] 
 #     container = argv[2]
 #     conn = argv[3]
 
-#     blob_service = BlobServiceClient.from_connection_string(conn)
-#     blob_client = blob_service.get_blob_client(container=container, blob=file_name)
-#     blob_poperties=blob_client.get_blob_properties()
-#     blob_size=blob_poperties.size
-    
-#     download_chunks(file_name, container, conn, blob_size)
-    # print(f'db_path: {db_path}, output_path {output_path}') 
-    # res = export_parquet(db_path, output_path)
-    # print(f'------------ res: {res}')
-    # upload(output_path, res, db_path)
+#     found_objects = gc.get_objects()
+#     print('%d objects before' % len(found_objects))
+
+#     download_chunks(file_name, container, conn )
+
+#     found_objects = gc.get_objects()
+#     print('%d objects after' % len(found_objects))
+
+#     gc.collect()
+#     found_objects = gc.get_objects()
+#     print('%d objects after gc' % len(found_objects))
+
+    # db_path = f'/tmp/{file_name}'
+    # output_path = f'{file_name}.parquet'
+    # export_parquet(db_path, output_path)
+#     found_objects = gc.get_objects()
+#     print('%d objects after parquet' % len(found_objects))
+#     upload(file_name, res)
+
+#     found_objects = gc.get_objects()
+#     print('%d objects after upload' % len(found_objects))

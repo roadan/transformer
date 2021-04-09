@@ -3,11 +3,9 @@
   "disabled": false,
   "bindings": [
     {
-      "name": "myblob",
-      "type": "blobTrigger",
-      "direction": "in",
-      "path": "sqlitefiles/{name}",
-      "connection": "badookinstore"
+      "type": "eventGridTrigger",
+      "name": "event",
+      "direction": "in"
     }
   ]
 }

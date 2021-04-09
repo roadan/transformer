@@ -1,7 +1,10 @@
 dask[dataframe]
+dask
 azure-functions
 azure-storage-blob
-spatialite 
 pysqlite3
 pandas
 pyarrow
+sqlalchemy
+adlfs
+pysqlcipher3

@@ -6,7 +6,7 @@ do
         n) name=${OPTARG};;
         s) storagename=${OPTARG};;    #blacktransformer2
         l) location=${OPTARG};;       #australiaeast
-        r) resourcegroup=${OPTARG};;  #blacktransformer2
+        r) resourcegroup=${OPTARG};;  #blacktransf  ormer2
         o) badookoutstore=${OPTARG};; 
         i) incontainer=${OPTARG};; 
     esac
@@ -20,6 +20,7 @@ echo "out container: $badookoutstore";
 echo "in container: $incontainer";
 
 connectionString=$(az storage account show-connection-string --resource-group $resourcegroup --name $storagename --query connectionString --output tsv)
+storageKey=$(az storage account keys list --account-name $storagename --query '[0].value')
 
 az functionapp plan create \
   --resource-group $resourcegroup \
@@ -29,7 +30,7 @@ az functionapp plan create \
   --sku EP3 \
   --is-linux
 
-az functionapp create \
+funcid=$(az functionapp create \
   --name $name \
   --storage-account $storagename \
   --plan badook-func \
@@ -38,12 +39,7 @@ az functionapp create \
   --runtime python \
   --runtime-version 3.7 \
   --functions-version 3 \
-  --deployment-container-image-name gcr.io/badook-cloud-public/blacktransformer:latest 
-
-az functionapp config appsettings set \
-  -n $name \
-  -g $resourcegroup \
-  --settings "AzureWebJobsStorage=$connectionString"
+  --deployment-container-image-name gcr.io/badook-cloud-public/blacktransformer:latest --query id --output tsv 2> /dev/null)
 
 az functionapp config appsettings set \
   -n $name \
@@ -58,8 +54,45 @@ az functionapp config appsettings set \
 az functionapp config appsettings set \
   -n $name \
   -g $resourcegroup \
+  --settings "AZURE_BLOB_ACCOUNT_NAME=$storagename"
+  
+az functionapp config appsettings set \
+  -n $name \
+  -g $resourcegroup \
+  --settings "AZURE_BLOB_ACCOUNT_KEY=$storageKey"
+
+az functionapp config appsettings set \
+  -n $name \
+  -g $resourcegroup \
   --settings "incontainer=$incontainer"
   
 az functionapp config appsettings set --name $name \
   --resource-group $resourcegroup \
   --settings SCALE_CONTROLLER_LOGGING_ENABLED=AppInsights:Verbose
+
+az functionapp config appsettings set --name $name \
+  --resource-group $resourcegroup \
+  --settings FUNCTIONS_WORKER_PROCESS_COUNT=1
+
+subjectBeginsWith="/blobServices/default/containers/"$incontainer
+storageAccountId=$(az storage account show --name $storagename --resource-group $resourcegroup --query id --output tsv 2> /dev/null)
+
+endpont=${funcid}/functions/new-black-file
+
+sleep 3m
+
+az eventgrid event-subscription create \
+  --name "$name-subscription" \
+  --source-resource-id $storageAccountId \
+  --included-event-types Microsoft.Storage.BlobRenamed Microsoft.Storage.BlobCreated \
+  --endpoint $endpont \
+  --endpoint-type azurefunction \
+  --subject-begins-with $subjectBeginsWith
+
+echo "az eventgrid event-subscription create \
+  --name "$name-subscription" \
+  --source-resource-id $storageAccountId \
+  --included-event-types Microsoft.Storage.BlobRenamed Microsoft.Storage.BlobCreated \
+  --endpoint $endpont \
+  --endpoint-type azurefunction \
+  --subject-begins-with $subjectBeginsWith"
