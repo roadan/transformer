@@ -1,12 +1,11 @@
 {
   "scriptFile": "__init__.py",
+  "disabled": false,
   "bindings": [
     {
-      "name": "myblob",
-      "type": "blobTrigger",
-      "direction": "in",
-      "path": "sqlitefile/{name}",
-      "connection": "badookinstore"
+      "type": "eventGridTrigger",
+      "name": "event",
+      "direction": "in"
     }
   ]
 }

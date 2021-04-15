@@ -1,6 +1,7 @@
 #!/bin/bash
 
-while getopts n:s:l:r:k:o:i: flag
+while getopts n:s:l:r:k:o:i:v:x: flag
+
 do
     case "${flag}" in
         n) name=${OPTARG};;
@@ -9,6 +10,8 @@ do
         r) resourcegroup=${OPTARG};;  #blacktransf  ormer2
         o) badookoutstore=${OPTARG};; 
         i) incontainer=${OPTARG};; 
+        v) vnet=${OPTARG};;
+        x) subnet=${OPTARG};;
     esac
 done
 
@@ -30,9 +33,13 @@ az functionapp plan create \
   --sku EP3 \
   --is-linux
 
+
+az storage account create --name ${name}logs --resource-group $resourcegroup
+
+
 funcid=$(az functionapp create \
   --name $name \
-  --storage-account $storagename \
+  --storage-account ${name}logs \
   --plan badook-func \
   --resource-group $resourcegroup \
   --os-type Linux \
@@ -40,6 +47,11 @@ funcid=$(az functionapp create \
   --runtime-version 3.7 \
   --functions-version 3 \
   --deployment-container-image-name gcr.io/badook-cloud-public/blacktransformer:latest --query id --output tsv 2> /dev/null)
+
+if [ ! -z "$vnet" ]
+then
+  az functionapp vnet-integration add --name $name --resource-group $resourcegroup --vnet $vnet --subnet $subnet
+fi
 
 az functionapp config appsettings set \
   -n $name \
