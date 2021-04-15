@@ -1,6 +1,7 @@
 #!/bin/bash
 
 while getopts n:s:l:r:k:o:i:v:x: flag
+
 do
     case "${flag}" in
         n) name=${OPTARG};;
@@ -32,6 +33,7 @@ az functionapp plan create \
   --sku EP3 \
   --is-linux
 
+
 az storage account create --name ${name}logs --resource-group $resourcegroup
 
 
@@ -45,7 +47,6 @@ funcid=$(az functionapp create \
   --runtime-version 3.7 \
   --functions-version 3 \
   --deployment-container-image-name gcr.io/badook-cloud-public/blacktransformer:latest --query id --output tsv 2> /dev/null)
-
 
 if [ ! -z "$vnet" ]
 then
@@ -87,7 +88,7 @@ az functionapp config appsettings set --name $name \
 
 subjectBeginsWith="/blobServices/default/containers/"$incontainer
 storageAccountId=$(az storage account show --name $storagename --resource-group $resourcegroup --query id --output tsv 2> /dev/null)
-  
+
 endpont=${funcid}/functions/new-black-file
 
 sleep 3m
